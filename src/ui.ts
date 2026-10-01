@@ -5,6 +5,7 @@ import { findCutPoint, energyFallback } from "./cutPoint";
 import { stitch } from "./stitch";
 import { Player } from "./player";
 import { createFrame, getVideoElement, updateProgress } from "./frame";
+import { triggerEhhEffects, type EffectsHandle } from "./effects";
 
 // SVG circle r=46, circumference = 2π×46 ≈ 289
 const RING_CIRCUMFERENCE = 289;
@@ -60,6 +61,7 @@ export function initUI(root: HTMLElement) {
   });
   transcriber.preload();
 
+  let activeEffects: EffectsHandle | null = null;
   let ehhArrayBuffer: ArrayBuffer | null = null;
   let ehhBuffer: AudioBuffer | null = null;
   let recordingBuffer: AudioBuffer | null = null;
@@ -425,15 +427,21 @@ export function initUI(root: HTMLElement) {
 
   document.getElementById("btn-replay")!.addEventListener("click", () => {
     if (!stitchResult) return;
+    // Clear any previous effects run
+    activeEffects?.clear();
+    activeEffects = null;
     player.stop();
     const vid = getVideoElement(frame);
     vid.currentTime = 0;
     void vid.play();
+    const ehhDuration = stitchResult.buffer.duration - stitchResult.ehhStartS;
+    // Seed from current time so each replay looks slightly different
+    const seed = (Date.now() % 10000) / 10000;
     player.play({
       buffer: stitchResult.buffer,
       ehhStartS: stitchResult.ehhStartS,
       onEhh: () => {
-        /* effects wired up in phase 3 */
+        activeEffects = triggerEhhEffects(frame, ehhDuration, seed);
       },
       onProgress: (f) => updateProgress(frame, f),
       onEnd: () => {
@@ -444,6 +452,8 @@ export function initUI(root: HTMLElement) {
 
   document.getElementById("btn-rerecord")!.addEventListener("click", () => {
     player.stop();
+    activeEffects?.clear();
+    activeEffects = null;
     recordingBuffer = null;
     stitchResult = null;
     hide("waveform");

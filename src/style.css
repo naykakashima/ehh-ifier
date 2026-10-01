@@ -53,6 +53,117 @@ body {
   overflow: hidden;
   background: #000;
   box-shadow: 0 0 60px rgba(232, 20, 28, 0.3);
+  flex-shrink: 0;
+}
+
+/* ── Fake TikTok UI ──────────────────────────────────────────────────── */
+.tiktok-ui {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.tt-actions {
+  position: absolute;
+  right: 8px;
+  bottom: 100px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.tt-avatar {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  overflow: visible;
+  margin-bottom: 4px;
+}
+.tt-avatar-inner {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #e8141c, #ff8c69);
+}
+.tt-plus {
+  position: absolute;
+  bottom: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 18px;
+  height: 18px;
+  background: #e8141c;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 18px;
+  text-align: center;
+}
+
+.tt-action-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  color: #fff;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.8));
+}
+.tt-action-item svg {
+  width: 28px;
+  height: 28px;
+}
+.tt-action-item span {
+  font-size: 10px;
+  font-weight: 600;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.tt-info {
+  position: absolute;
+  bottom: 52px;
+  left: 10px;
+  right: 72px;
+}
+.tt-username {
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+}
+.tt-sound {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.85);
+  margin-top: 3px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+}
+
+.tt-progress-track {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.25);
+}
+.tt-progress-track .progress-fill {
+  height: 100%;
+  background: rgba(255, 255, 255, 0.9);
+  width: 0%;
+  transition: width 0.1s linear;
+}
+
+/* Effects SVG layer */
+.effects-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
 }
 
 /* Controls area */

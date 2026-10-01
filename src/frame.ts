@@ -1,57 +1,72 @@
-// Fake TikTok frame with gameplay video and UI overlay
 import { ASSETS } from "./config";
 
 export function createFrame(): HTMLElement {
   const wrapper = document.createElement("div");
   wrapper.className = "tiktok-wrapper";
 
+  // ── Gameplay video ────────────────────────────────────────────────────────
   const video = document.createElement("video");
   video.src = ASSETS.GAMEPLAY_MP4;
   video.loop = true;
   video.muted = true;
   video.autoplay = true;
   video.playsInline = true;
+  video.setAttribute("playsinline", "");
   video.style.cssText =
     "width:100%;height:100%;object-fit:cover;position:absolute;inset:0;";
   video.addEventListener("error", () => {
     console.warn("[DEV] gameplay.mp4 failed to load");
-    wrapper.style.background = "#111";
+    wrapper.style.background =
+      "linear-gradient(160deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%)";
   });
 
-  // Fake TikTok UI overlay
+  // ── Fake TikTok UI overlay ────────────────────────────────────────────────
   const ui = document.createElement("div");
-  ui.style.cssText = "position:absolute;inset:0;pointer-events:none;";
+  ui.className = "tiktok-ui";
   ui.innerHTML = `
-    <div style="position:absolute;right:10px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:18px;align-items:center;">
-      <div style="width:44px;height:44px;border-radius:50%;background:#888;border:2px solid #fff;overflow:hidden;">
-        <div style="width:100%;height:100%;background:linear-gradient(135deg,#e8141c,#ff6b6b);"></div>
+    <!-- Right action column -->
+    <div class="tt-actions">
+      <div class="tt-avatar">
+        <div class="tt-avatar-inner"></div>
+        <div class="tt-plus">+</div>
       </div>
-      ${["❤️ 1.2M", "💬 43K", "🔖 89K", "↗️ 201K"].map((x) => `<div style="text-align:center;font-size:11px;color:#fff;text-shadow:0 1px 2px #000;">${x}</div>`).join("")}
+      <div class="tt-action-item">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.27 2 8.5 2 5.41 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.08C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.41 22 8.5c0 3.77-3.4 6.86-8.55 11.53L12 21.35z"/></svg>
+        <span>1.2M</span>
+      </div>
+      <div class="tt-action-item">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/></svg>
+        <span>43K</span>
+      </div>
+      <div class="tt-action-item">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z"/></svg>
+        <span>89K</span>
+      </div>
+      <div class="tt-action-item">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91-1.31-2.92-2.92-2.92z"/></svg>
+        <span>201K</span>
+      </div>
     </div>
-    <div style="position:absolute;bottom:50px;left:12px;right:80px;">
-      <div style="font-weight:700;font-size:13px;color:#fff;text-shadow:0 1px 2px #000;">@funkyehh_official</div>
-      <div style="font-size:11px;color:rgba(255,255,255,0.8);margin-top:2px;text-shadow:0 1px 2px #000;">♬ original sound - funkyehh</div>
+
+    <!-- Bottom info bar -->
+    <div class="tt-info">
+      <div class="tt-username">@funkyehh_official</div>
+      <div class="tt-sound">♬ original sound · funkyehh</div>
     </div>
-    <div style="position:absolute;bottom:0;left:0;right:0;height:3px;background:rgba(255,255,255,0.3);">
-      <div class="progress-fill" style="height:100%;background:#fff;width:0%;transition:width 0.1s;"></div>
+
+    <!-- Progress bar -->
+    <div class="tt-progress-track">
+      <div class="progress-fill"></div>
     </div>
   `;
 
-  // SVG overlay for effects
+  // ── SVG overlay — effects draw here ──────────────────────────────────────
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.style.cssText =
-    "position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none;";
-  svg.setAttribute("class", "effects-svg");
-
-  // Face image container
-  const faceContainer = document.createElement("div");
-  faceContainer.className = "face-container";
-  faceContainer.style.cssText = "position:absolute;display:none;";
+  svg.classList.add("effects-svg");
 
   wrapper.appendChild(video);
   wrapper.appendChild(ui);
   wrapper.appendChild(svg);
-  wrapper.appendChild(faceContainer);
 
   return wrapper;
 }
@@ -61,6 +76,6 @@ export function getVideoElement(frame: HTMLElement): HTMLVideoElement {
 }
 
 export function updateProgress(frame: HTMLElement, fraction: number) {
-  const fill = frame.querySelector(".progress-fill") as HTMLElement;
+  const fill = frame.querySelector(".progress-fill") as HTMLElement | null;
   if (fill) fill.style.width = `${fraction * 100}%`;
 }
