@@ -18,9 +18,19 @@ export function findCutPoint(
       !(WHISPER.FILLERS as readonly string[]).includes(clean)
     );
   });
-  if (real.length === 0) return audioDurationS * 0.8; // fallback
+  if (real.length === 0) return audioDurationS * 0.8;
+
   const last = real[real.length - 1];
-  return Math.max(0, last.start + CUT.WHISPER_OFFSET_MS / 1000);
+
+  // Whisper word timestamps often land at the phonetic center/end of the word,
+  // not the true acoustic onset. Using the previous word's end is more reliable
+  // as a "right before the last word starts" marker.
+  const prev = real.length >= 2 ? real[real.length - 2] : null;
+  const anchor = prev
+    ? Math.min(prev.end, last.start) // whichever is earlier
+    : last.start;
+
+  return Math.max(0, anchor + CUT.WHISPER_OFFSET_MS / 1000);
 }
 
 export function energyFallback(buffer: AudioBuffer): number {

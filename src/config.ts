@@ -13,14 +13,14 @@ export const WHISPER = {
 } as const;
 
 export const CUT = {
-  WHISPER_OFFSET_MS: -60, // Whisper word starts run late
+  WHISPER_OFFSET_MS: -40, // small lead-in before the last word's anchor point
   ENERGY_FRAME_MS: 20, // RMS frame size for energy fallback
   ENERGY_SILENCE_THRESHOLD: 0.01,
 } as const;
 
 export const STITCH = {
   FADE_OUT_MS: 20, // fade-out on recording before ehh
-  EHH_OVERLAP_MS: -20, // negative = gap, positive = overlap
+  EHH_OVERLAP_MS: 0, // 0 = seamless join at cut point
   EHH_PITCH_DEFAULT: 1.0, // playbackRate
   EHH_PITCH_MIN: 0.7,
   EHH_PITCH_MAX: 1.4,
