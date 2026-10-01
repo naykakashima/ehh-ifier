@@ -305,6 +305,9 @@ export function initUI(root: HTMLElement) {
   }
 
   // ── Waveform ─────────────────────────────────────────────────────────────────
+  // Drag state lives outside drawWaveform so re-draws don't reset it.
+  let waveformDragging = false;
+
   function drawWaveform(buf: AudioBuffer, cut: number) {
     const canvas = document.getElementById("waveform") as HTMLCanvasElement;
     show("waveform");
@@ -351,53 +354,36 @@ export function initUI(root: HTMLElement) {
     ctx2d.font = `${10}px system-ui`;
     ctx2d.fillText("✂", Math.min(cutX + 4, w - 16), 14);
 
-    // Drag — mouse
-    let dragging = false;
+    // Attach pointer-event drag handlers once (guard against re-registration).
+    if (canvas.dataset.dragInit) return;
+    canvas.dataset.dragInit = "1";
+
     const getF = (clientX: number) => {
       const r = canvas.getBoundingClientRect();
       return Math.max(0, Math.min(1, (clientX - r.left) / r.width));
     };
-    canvas.onmousedown = (e) => {
-      dragging = true;
+
+    canvas.addEventListener("pointerdown", (e) => {
+      canvas.setPointerCapture(e.pointerId);
+      waveformDragging = true;
       cutPointS = getF(e.clientX) * buf.duration;
       drawWaveform(buf, cutPointS);
-    };
-    canvas.onmousemove = (e) => {
-      if (!dragging) return;
+    });
+
+    canvas.addEventListener("pointermove", (e) => {
+      if (!waveformDragging) return;
       cutPointS = getF(e.clientX) * buf.duration;
       drawWaveform(buf, cutPointS);
-    };
-    canvas.onmouseup = () => {
-      if (dragging) {
-        dragging = false;
+    });
+
+    const endDrag = () => {
+      if (waveformDragging) {
+        waveformDragging = false;
         void doStitch();
       }
     };
-    canvas.onmouseleave = () => {
-      if (dragging) {
-        dragging = false;
-        void doStitch();
-      }
-    };
-    // Touch
-    canvas.ontouchstart = (e) => {
-      e.preventDefault();
-      dragging = true;
-      cutPointS = getF(e.touches[0].clientX) * buf.duration;
-      drawWaveform(buf, cutPointS);
-    };
-    canvas.ontouchmove = (e) => {
-      e.preventDefault();
-      if (!dragging) return;
-      cutPointS = getF(e.touches[0].clientX) * buf.duration;
-      drawWaveform(buf, cutPointS);
-    };
-    canvas.ontouchend = () => {
-      if (dragging) {
-        dragging = false;
-        void doStitch();
-      }
-    };
+    canvas.addEventListener("pointerup", endDrag);
+    canvas.addEventListener("pointercancel", endDrag);
   }
 
   // ── Controls ─────────────────────────────────────────────────────────────────

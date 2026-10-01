@@ -22,13 +22,11 @@ export function findCutPoint(
 
   const last = real[real.length - 1];
 
-  // Whisper word timestamps often land at the phonetic center/end of the word,
-  // not the true acoustic onset. Using the previous word's end is more reliable
-  // as a "right before the last word starts" marker.
+  // Whisper word timestamps often lag the true acoustic onset by 100–300 ms.
+  // The most reliable cut is right after the previous word ends — guaranteed
+  // to be before the last word starts.
   const prev = real.length >= 2 ? real[real.length - 2] : null;
-  const anchor = prev
-    ? Math.min(prev.end, last.start) // whichever is earlier
-    : last.start;
+  const anchor = prev ? prev.end : last.start;
 
   return Math.max(0, anchor + CUT.WHISPER_OFFSET_MS / 1000);
 }

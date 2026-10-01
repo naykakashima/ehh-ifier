@@ -13,7 +13,7 @@ export const WHISPER = {
 } as const;
 
 export const CUT = {
-  WHISPER_OFFSET_MS: -40, // small lead-in before the last word's anchor point
+  WHISPER_OFFSET_MS: 0, // prev.end is already right before the last word
   ENERGY_FRAME_MS: 20, // RMS frame size for energy fallback
   ENERGY_SILENCE_THRESHOLD: 0.01,
 } as const;
