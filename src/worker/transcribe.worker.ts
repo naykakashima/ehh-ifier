@@ -6,27 +6,18 @@ env.allowLocalModels = false;
 type ASRPipeline = Awaited<ReturnType<typeof pipeline>>;
 let asr: ASRPipeline | null = null;
 
-async function detectDevice(): Promise<"webgpu" | "wasm"> {
-  try {
-    if (typeof navigator === "undefined" || !("gpu" in navigator))
-      return "wasm";
-    const adapter = await (
-      navigator as unknown as { gpu: { requestAdapter(): Promise<unknown> } }
-    ).gpu.requestAdapter();
-    return adapter ? "webgpu" : "wasm";
-  } catch {
-    return "wasm";
-  }
+// Xenova/whisper-tiny.en was not exported with WebGPU dtype files,
+// so we always use WASM for this model.
+function detectDevice(): "wasm" {
+  return "wasm";
 }
 
 async function loadModel(
   onProgress: (p: { stage: string; percent?: number }) => void,
 ): Promise<ASRPipeline> {
   if (asr) return asr;
-  const device = await detectDevice();
-  onProgress({
-    stage: `Loading model (${device === "webgpu" ? "GPU" : "CPU"})…`,
-  });
+  const device = detectDevice();
+  onProgress({ stage: "Loading model (CPU/WASM)…" });
   asr = await pipeline("automatic-speech-recognition", WHISPER.MODEL_ID, {
     dtype: "fp32",
     device,

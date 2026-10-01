@@ -7,7 +7,7 @@ export const ASSETS = {
 } as const;
 
 export const WHISPER = {
-  MODEL_ID: "onnx-community/whisper-tiny.en",
+  MODEL_ID: "Xenova/whisper-tiny.en",
   SAMPLE_RATE: 16000,
   FILLERS: ["uh", "um", "ah", "er", "like", "you know"],
 } as const;
