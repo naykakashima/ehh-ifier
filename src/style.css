@@ -63,11 +63,47 @@ body {
   gap: 14px;
 }
 
+/* Mic area + countdown ring */
+.mic-area {
+  position: relative;
+  width: 100px;
+  height: 100px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.countdown-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+  pointer-events: none;
+}
+
+.countdown-track {
+  fill: none;
+  stroke: #2a2a2a;
+  stroke-width: 6;
+}
+
+.countdown-fill {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 6;
+  stroke-linecap: round;
+  stroke-dasharray: 289;
+  stroke-dashoffset: 289;
+  transition: stroke-dashoffset 0.1s linear;
+}
+
 /* Mic button */
 .mic-btn {
   position: relative;
-  width: 80px;
-  height: 80px;
+  width: 72px;
+  height: 72px;
   border-radius: 50%;
   background: var(--accent);
   border: none;
@@ -75,9 +111,9 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 0 auto;
   transition: transform 0.1s;
-  font-size: 2rem;
+  font-size: 1.8rem;
+  touch-action: none;
 }
 .mic-btn:active {
   transform: scale(0.95);
@@ -91,7 +127,7 @@ body {
     box-shadow: 0 0 0 0 rgba(232, 20, 28, 0.7);
   }
   50% {
-    box-shadow: 0 0 0 16px rgba(232, 20, 28, 0);
+    box-shadow: 0 0 0 12px rgba(232, 20, 28, 0);
   }
 }
 
@@ -121,10 +157,10 @@ body {
 /* Waveform */
 .waveform-canvas {
   width: 100%;
-  height: 80px;
   background: var(--surface);
   border-radius: 8px;
   cursor: col-resize;
+  display: block;
 }
 
 /* Transcript */

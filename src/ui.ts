@@ -1,5 +1,4 @@
-// Main UI orchestration
-import { RECORD, STITCH } from "./config";
+import { RECORD, STITCH, ASSETS } from "./config";
 import { Recorder } from "./recorder";
 import { createTranscriber } from "./transcribe";
 import { findCutPoint, energyFallback } from "./cutPoint";
@@ -7,22 +6,31 @@ import { stitch } from "./stitch";
 import { Player } from "./player";
 import { createFrame, getVideoElement, updateProgress } from "./frame";
 
+// SVG circle r=46, circumference = 2π×46 ≈ 289
+const RING_CIRCUMFERENCE = 289;
+
 export function initUI(root: HTMLElement) {
   root.innerHTML = `
     <h1 class="title">The <span>Ehh</span>-ifier</h1>
     <div id="frame-mount"></div>
     <div class="controls">
       <div class="status" id="status">Tap the mic and say something</div>
-      <div style="position:relative;width:80px;margin:0 auto;">
-        <button class="mic-btn" id="mic-btn">🎤</button>
+      <div class="mic-area">
+        <svg class="countdown-ring" viewBox="0 0 100 100" aria-hidden="true">
+          <circle class="countdown-track" cx="50" cy="50" r="46"/>
+          <circle class="countdown-fill" id="countdown-fill" cx="50" cy="50" r="46"/>
+        </svg>
+        <button class="mic-btn" id="mic-btn" aria-label="Record">🎤</button>
       </div>
       <div class="level-meter"><div class="level-meter-fill" id="level-fill"></div></div>
-      <canvas class="waveform-canvas hidden" id="waveform" width="400" height="80"></canvas>
+      <canvas class="waveform-canvas hidden" id="waveform"></canvas>
       <div class="transcript hidden" id="transcript"></div>
       <div class="slider-row hidden" id="pitch-row">
         <span>Ehh pitch</span>
-        <input type="range" id="pitch" min="0.7" max="1.4" step="0.05" value="1.0">
-        <span id="pitch-val">1.0×</span>
+        <input type="range" id="pitch"
+          min="${STITCH.EHH_PITCH_MIN}" max="${STITCH.EHH_PITCH_MAX}"
+          step="0.05" value="${STITCH.EHH_PITCH_DEFAULT}">
+        <span id="pitch-val">${STITCH.EHH_PITCH_DEFAULT.toFixed(2)}×</span>
       </div>
       <div class="toggle-row hidden" id="fry-row">
         <input type="checkbox" id="deep-fry">
@@ -50,127 +58,199 @@ export function initUI(root: HTMLElement) {
       p.percent != null ? `${p.stage} ${Math.round(p.percent)}%` : p.stage,
     );
   });
-  // Start preloading model immediately
   transcriber.preload();
 
-  // suppress unused-variable warning — STITCH used via doStitch options
-  void STITCH;
-
-  let recordingBlob: Blob | null = null;
-  let recordingBuffer: AudioBuffer | null = null;
+  let ehhArrayBuffer: ArrayBuffer | null = null;
   let ehhBuffer: AudioBuffer | null = null;
+  let recordingBuffer: AudioBuffer | null = null;
   let stitchResult: { buffer: AudioBuffer; ehhStartS: number } | null = null;
   let cutPointS = 0;
-  let audioCtx: AudioContext | null = null;
+  let sharedCtx: AudioContext | null = null;
+
+  // Prefetch ehh bytes immediately — no AudioContext needed for a fetch
+  fetch(ASSETS.EHH_MP3)
+    .then(async (res) => {
+      if (!res.ok) throw new Error("ehh.mp3 not found");
+      ehhArrayBuffer = await res.arrayBuffer();
+    })
+    .catch((err: unknown) => {
+      console.warn("[DEV] ehh.mp3 failed to prefetch:", err);
+      setStatus("⚠️ DEV: ehh.mp3 missing from /public");
+    });
+
+  function getCtx(): AudioContext {
+    if (!sharedCtx || sharedCtx.state === "closed")
+      sharedCtx = new AudioContext();
+    if (sharedCtx.state === "suspended") void sharedCtx.resume();
+    return sharedCtx;
+  }
+
+  async function getEhhBuffer(): Promise<AudioBuffer | null> {
+    if (ehhBuffer) return ehhBuffer;
+    if (!ehhArrayBuffer) return null;
+    // slice() to avoid detaching the original ArrayBuffer
+    ehhBuffer = await getCtx().decodeAudioData(ehhArrayBuffer.slice(0));
+    return ehhBuffer;
+  }
 
   function setStatus(msg: string) {
-    const el = document.getElementById("status")!;
-    el.textContent = msg;
+    document.getElementById("status")!.textContent = msg;
   }
 
-  function getAudioCtx() {
-    if (!audioCtx || audioCtx.state === "closed") audioCtx = new AudioContext();
-    return audioCtx;
-  }
-
-  // Load ehh.mp3
-  async function loadEhh() {
-    try {
-      const res = await fetch("/ehh.mp3");
-      if (!res.ok) throw new Error("ehh.mp3 not found");
-      const ab = await res.arrayBuffer();
-      const ctx = getAudioCtx();
-      ehhBuffer = await ctx.decodeAudioData(ab);
-    } catch (err) {
-      console.warn("[DEV] ehh.mp3 failed to load:", err);
-      setStatus("⚠️ DEV: ehh.mp3 missing");
-    }
-  }
-  loadEhh();
-
+  // ── Mic button ──────────────────────────────────────────────────────────────
   const micBtn = document.getElementById("mic-btn") as HTMLButtonElement;
   const levelFill = document.getElementById("level-fill") as HTMLElement;
+  const countdownFill = document.getElementById(
+    "countdown-fill",
+  ) as SVGCircleElement & HTMLElement;
 
-  micBtn.addEventListener("click", async () => {
-    if (recorder.isRecording) {
-      recorder.stop();
-      micBtn.classList.remove("recording");
-      micBtn.textContent = "🎤";
-      return;
-    }
+  let holdTimer: ReturnType<typeof setTimeout> | null = null;
+  let holdMode = false;
+  let pointerDownTime = 0;
+
+  function setRing(remainingMs: number) {
+    const fraction = remainingMs / RECORD.MAX_DURATION_MS;
+    countdownFill.style.strokeDashoffset = String(
+      (1 - fraction) * RING_CIRCUMFERENCE,
+    );
+  }
+
+  async function startRecording() {
+    if (recorder.isRecording) return;
+    setStatus("Recording… tap again to stop");
+    micBtn.classList.add("recording");
+    micBtn.textContent = "⏹";
+    countdownFill.style.strokeDashoffset = "0";
     try {
-      setStatus("Recording… tap again to stop");
-      micBtn.classList.add("recording");
-      micBtn.textContent = "⏹";
       await recorder.start({
         maxDurationMs: RECORD.MAX_DURATION_MS,
         onLevel: (l) => {
           levelFill.style.width = `${l * 100}%`;
         },
+        onTimeLeft: (ms) => setRing(ms),
         onStop: handleRecordingDone,
       });
     } catch (err: unknown) {
       micBtn.classList.remove("recording");
       micBtn.textContent = "🎤";
+      countdownFill.style.strokeDashoffset = String(RING_CIRCUMFERENCE);
       if (err instanceof Error && err.name === "NotAllowedError") {
         setStatus("Mic access denied — please allow mic in browser settings");
       } else if (err instanceof Error && err.name === "NotFoundError") {
         setStatus("No mic found — plug one in and try again");
       } else {
-        setStatus("Could not start recording: " + String(err));
+        setStatus("Could not start: " + String(err));
       }
+    }
+  }
+
+  function stopRecording() {
+    if (!recorder.isRecording) return;
+    recorder.stop();
+    micBtn.classList.remove("recording");
+    micBtn.textContent = "🎤";
+    countdownFill.style.strokeDashoffset = String(RING_CIRCUMFERENCE);
+    levelFill.style.width = "0%";
+  }
+
+  micBtn.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    pointerDownTime = Date.now();
+    holdMode = false;
+    if (!recorder.isRecording) {
+      // Hold for 400 ms → hold-to-record mode; shorter press falls through to click
+      holdTimer = setTimeout(async () => {
+        holdMode = true;
+        await startRecording();
+      }, 400);
     }
   });
 
+  micBtn.addEventListener("pointerup", () => {
+    if (holdTimer) {
+      clearTimeout(holdTimer);
+      holdTimer = null;
+    }
+    if (holdMode && recorder.isRecording) {
+      holdMode = false;
+      stopRecording();
+    }
+  });
+
+  micBtn.addEventListener("pointercancel", () => {
+    if (holdTimer) {
+      clearTimeout(holdTimer);
+      holdTimer = null;
+    }
+    if (holdMode) stopRecording();
+    holdMode = false;
+  });
+
+  micBtn.addEventListener("click", async () => {
+    // Ignore clicks that were part of a hold gesture
+    if (holdMode || Date.now() - pointerDownTime > 400) return;
+    if (recorder.isRecording) stopRecording();
+    else await startRecording();
+  });
+
+  // ── Recording done ──────────────────────────────────────────────────────────
   async function handleRecordingDone(blob: Blob) {
     levelFill.style.width = "0%";
     micBtn.classList.remove("recording");
     micBtn.textContent = "🎤";
-    recordingBlob = blob;
-    void recordingBlob; // referenced for future export
+
+    // Decode ehh now — we're definitely inside a user-gesture chain
+    await getEhhBuffer();
+
     setStatus("Finding your last word…");
 
     try {
-      const ctx = getAudioCtx();
+      const ctx = getCtx();
       const ab = await blob.arrayBuffer();
       recordingBuffer = await ctx.decodeAudioData(ab);
 
-      // Downmix to mono, resample to 16kHz for Whisper
+      if (recordingBuffer.duration < 0.3) {
+        // Too short — whole thing becomes the ehh
+        cutPointS = 0;
+        await doStitch();
+        showControls();
+        setStatus("That was short — the whole thing is now the ehh!");
+        return;
+      }
+
       const mono16k = await downsampleToMono16k(recordingBuffer);
-
       const result = await transcriber.transcribe(mono16k);
-      setStatus(
-        result.words.length > 0
-          ? "Got it! Adjust the cut point if needed."
-          : "Transcription done.",
-      );
 
-      cutPointS =
-        result.words.length > 0
-          ? findCutPoint(result.words, recordingBuffer.duration)
-          : energyFallback(recordingBuffer);
+      if (result.words.length > 0) {
+        cutPointS = findCutPoint(result.words, recordingBuffer.duration);
+        setStatus("Got it! Drag the red marker to adjust the cut point.");
+      } else {
+        cutPointS = energyFallback(recordingBuffer);
+        setStatus(
+          cutPointS > 0
+            ? "No transcript — used audio energy for cut point. Adjust if needed."
+            : "Couldn't detect speech — try again a bit louder",
+        );
+      }
 
-      // Show transcript
       showTranscript(result.text, result.words);
       drawWaveform(recordingBuffer, cutPointS);
-
-      // Auto-stitch
       await doStitch();
-
-      show("pitch-row");
-      show("fry-row");
-      show("btn-preview");
-      show("btn-replay");
-      show("btn-rerecord");
-      show("btn-download");
+      showControls();
     } catch (err) {
       setStatus("Error: " + String(err));
       console.error(err);
     }
   }
 
+  // ── Stitch ──────────────────────────────────────────────────────────────────
   async function doStitch() {
-    if (!recordingBuffer || !ehhBuffer) return;
+    if (!recordingBuffer) return;
+    const ehh = await getEhhBuffer();
+    if (!ehh) {
+      setStatus("⚠️ DEV: ehh.mp3 missing — cannot stitch");
+      return;
+    }
     const pitch = parseFloat(
       (document.getElementById("pitch") as HTMLInputElement).value,
     );
@@ -178,127 +258,192 @@ export function initUI(root: HTMLElement) {
       .checked;
     stitchResult = await stitch({
       recordingBuffer,
-      ehhBuffer,
+      ehhBuffer: ehh,
       cutPointS,
       ehhPitch: pitch,
       deepFried,
     });
   }
 
+  // ── Transcript ──────────────────────────────────────────────────────────────
   function showTranscript(
     text: string,
     words: Array<{ word: string; start: number; end: number }>,
   ) {
     const el = document.getElementById("transcript")!;
     show("transcript");
-    if (!words.length) {
+    if (!words.length || !text.trim()) {
       el.textContent = text || "(no transcript)";
       return;
     }
-    const lastWord = words[words.length - 1].word;
-    const before = text.slice(0, text.lastIndexOf(lastWord));
-    el.innerHTML = `${before}<span class="last-word">${lastWord}</span>`;
+    const real = words.filter(
+      (w) => w.word.replace(/[^a-zA-Z]/g, "").length > 0,
+    );
+    if (!real.length) {
+      el.textContent = text;
+      return;
+    }
+    const lastWord = real[real.length - 1].word.trim();
+    const idx = text.lastIndexOf(lastWord);
+    if (idx === -1) {
+      el.textContent = text;
+      return;
+    }
+    el.innerHTML =
+      esc(text.slice(0, idx)) +
+      `<span class="last-word">${esc(lastWord)}</span>` +
+      esc(text.slice(idx + lastWord.length));
   }
 
+  // ── Waveform ─────────────────────────────────────────────────────────────────
   function drawWaveform(buf: AudioBuffer, cut: number) {
     const canvas = document.getElementById("waveform") as HTMLCanvasElement;
     show("waveform");
-    const ctx = canvas.getContext("2d")!;
-    const w = canvas.width;
-    const h = canvas.height;
+    const dpr = window.devicePixelRatio || 1;
+    const displayW =
+      canvas.getBoundingClientRect().width || canvas.offsetWidth || 400;
+    const displayH = 80;
+    canvas.width = Math.round(displayW * dpr);
+    canvas.height = Math.round(displayH * dpr);
+    canvas.style.height = displayH + "px";
+
+    const ctx2d = canvas.getContext("2d")!;
+    ctx2d.scale(dpr, dpr);
+    const w = displayW,
+      h = displayH;
     const data = buf.getChannelData(0);
-    ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = "#1a1a1a";
-    ctx.fillRect(0, 0, w, h);
-    ctx.strokeStyle = "#888";
-    ctx.beginPath();
+
+    ctx2d.fillStyle = "#1a1a1a";
+    ctx2d.fillRect(0, 0, w, h);
+    ctx2d.strokeStyle = "#555";
+    ctx2d.lineWidth = 1;
+    ctx2d.beginPath();
     const step = Math.ceil(data.length / w);
     for (let i = 0; i < w; i++) {
-      let min = 1;
-      let max = -1;
+      let min = 1,
+        max = -1;
       for (let j = i * step; j < (i + 1) * step && j < data.length; j++) {
         if (data[j] < min) min = data[j];
         if (data[j] > max) max = data[j];
       }
-      ctx.moveTo(i, ((1 + min) * h) / 2);
-      ctx.lineTo(i, ((1 + max) * h) / 2);
+      ctx2d.moveTo(i, ((1 + min) * h) / 2);
+      ctx2d.lineTo(i, ((1 + max) * h) / 2);
     }
-    ctx.stroke();
-    // Cut marker
-    const cutX = (cut / buf.duration) * w;
-    ctx.strokeStyle = "#E8141C";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(cutX, 0);
-    ctx.lineTo(cutX, h);
-    ctx.stroke();
+    ctx2d.stroke();
 
-    // Drag
+    const cutX = (cut / buf.duration) * w;
+    ctx2d.strokeStyle = "#E8141C";
+    ctx2d.lineWidth = 2;
+    ctx2d.beginPath();
+    ctx2d.moveTo(cutX, 0);
+    ctx2d.lineTo(cutX, h);
+    ctx2d.stroke();
+    ctx2d.fillStyle = "#E8141C";
+    ctx2d.font = `${10}px system-ui`;
+    ctx2d.fillText("✂", Math.min(cutX + 4, w - 16), 14);
+
+    // Drag — mouse
     let dragging = false;
+    const getF = (clientX: number) => {
+      const r = canvas.getBoundingClientRect();
+      return Math.max(0, Math.min(1, (clientX - r.left) / r.width));
+    };
     canvas.onmousedown = (e) => {
       dragging = true;
-      updateCut(e);
+      cutPointS = getF(e.clientX) * buf.duration;
+      drawWaveform(buf, cutPointS);
     };
     canvas.onmousemove = (e) => {
-      if (dragging) updateCut(e);
+      if (!dragging) return;
+      cutPointS = getF(e.clientX) * buf.duration;
+      drawWaveform(buf, cutPointS);
     };
     canvas.onmouseup = () => {
       if (dragging) {
         dragging = false;
-        doStitch();
+        void doStitch();
       }
     };
-    function updateCut(e: MouseEvent) {
-      const rect = canvas.getBoundingClientRect();
-      const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-      cutPointS = x * buf.duration;
+    canvas.onmouseleave = () => {
+      if (dragging) {
+        dragging = false;
+        void doStitch();
+      }
+    };
+    // Touch
+    canvas.ontouchstart = (e) => {
+      e.preventDefault();
+      dragging = true;
+      cutPointS = getF(e.touches[0].clientX) * buf.duration;
       drawWaveform(buf, cutPointS);
-    }
+    };
+    canvas.ontouchmove = (e) => {
+      e.preventDefault();
+      if (!dragging) return;
+      cutPointS = getF(e.touches[0].clientX) * buf.duration;
+      drawWaveform(buf, cutPointS);
+    };
+    canvas.ontouchend = () => {
+      if (dragging) {
+        dragging = false;
+        void doStitch();
+      }
+    };
+  }
+
+  // ── Controls ─────────────────────────────────────────────────────────────────
+  function showControls() {
+    show("pitch-row");
+    show("fry-row");
+    show("btn-preview");
+    show("btn-replay");
+    show("btn-rerecord");
+    show("btn-download");
   }
 
   document.getElementById("pitch")!.addEventListener("input", (e) => {
     const v = (e.target as HTMLInputElement).value;
     document.getElementById("pitch-val")!.textContent =
       `${parseFloat(v).toFixed(2)}×`;
-    doStitch();
+    void doStitch();
   });
   document
     .getElementById("deep-fry")!
-    .addEventListener("change", () => doStitch());
+    .addEventListener("change", () => void doStitch());
 
-  document
-    .getElementById("btn-preview")!
-    .addEventListener("click", async () => {
-      if (!stitchResult) return;
-      player.stop();
-      player.play(
-        stitchResult.buffer,
-        stitchResult.ehhStartS,
-        () => {},
-        () => {},
-      );
-    });
-
-  document.getElementById("btn-replay")!.addEventListener("click", async () => {
+  document.getElementById("btn-preview")!.addEventListener("click", () => {
     if (!stitchResult) return;
     player.stop();
-    getVideoElement(frame).currentTime = 0;
-    getVideoElement(frame).play();
-    player.play(
-      stitchResult.buffer,
-      stitchResult.ehhStartS,
-      () => {
-        // fire ehh moment — effects stub
+    player.play({
+      buffer: stitchResult.buffer,
+      ehhStartS: stitchResult.ehhStartS,
+      onEhh: () => {},
+      onProgress: () => {},
+      onEnd: () => {},
+    });
+  });
+
+  document.getElementById("btn-replay")!.addEventListener("click", () => {
+    if (!stitchResult) return;
+    player.stop();
+    const vid = getVideoElement(frame);
+    vid.currentTime = 0;
+    void vid.play();
+    player.play({
+      buffer: stitchResult.buffer,
+      ehhStartS: stitchResult.ehhStartS,
+      onEhh: () => {
+        /* effects wired up in phase 3 */
       },
-      () => {
+      onProgress: (f) => updateProgress(frame, f),
+      onEnd: () => {
         updateProgress(frame, 0);
       },
-    );
+    });
   });
 
   document.getElementById("btn-rerecord")!.addEventListener("click", () => {
     player.stop();
-    recordingBlob = null;
     recordingBuffer = null;
     stitchResult = null;
     hide("waveform");
@@ -320,17 +465,18 @@ export function initUI(root: HTMLElement) {
   }
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
 async function downsampleToMono16k(buffer: AudioBuffer): Promise<Float32Array> {
-  const targetSR = 16000;
-  const offCtx = new OfflineAudioContext(
-    1,
-    Math.ceil(buffer.duration * targetSR),
-    targetSR,
-  );
-  const src = offCtx.createBufferSource();
+  const SR = 16000;
+  const off = new OfflineAudioContext(1, Math.ceil(buffer.duration * SR), SR);
+  const src = off.createBufferSource();
   src.buffer = buffer;
-  src.connect(offCtx.destination);
+  src.connect(off.destination);
   src.start();
-  const rendered = await offCtx.startRendering();
-  return rendered.getChannelData(0);
+  return (await off.startRendering()).getChannelData(0);
+}
+
+function esc(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
