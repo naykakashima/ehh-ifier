@@ -27,6 +27,10 @@ dist-ssr
 .claude/
 
 # original assets at root (copies live in public/)
-ehhh-face.jpg
-ehhhh.mp3
-gameplay.mp4
+/ehhh-face.jpg
+/ehhhh.mp3
+/face.jpg
+/gameplay.mp4
+
+# Vercel
+.vercel/
