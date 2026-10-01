@@ -1,0 +1,213 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg: #0a0a0a;
+  --surface: #1a1a1a;
+  --accent: #e8141c;
+  --text: #f0f0f0;
+  --muted: #888;
+  --font: "Inter", system-ui, sans-serif;
+}
+
+html,
+body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  overflow-x: hidden;
+}
+
+#app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 20px;
+  gap: 20px;
+}
+
+.title {
+  font-size: clamp(1.5rem, 4vw, 2.5rem);
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  text-align: center;
+}
+.title span {
+  color: var(--accent);
+}
+
+/* TikTok frame container */
+.tiktok-wrapper {
+  position: relative;
+  width: min(360px, 90vw);
+  aspect-ratio: 9/16;
+  border-radius: 20px;
+  overflow: hidden;
+  background: #000;
+  box-shadow: 0 0 60px rgba(232, 20, 28, 0.3);
+}
+
+/* Controls area */
+.controls {
+  width: min(400px, 95vw);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Mic button */
+.mic-btn {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+  transition: transform 0.1s;
+  font-size: 2rem;
+}
+.mic-btn:active {
+  transform: scale(0.95);
+}
+.mic-btn.recording {
+  animation: pulse 1s infinite;
+}
+@keyframes pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(232, 20, 28, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 0 16px rgba(232, 20, 28, 0);
+  }
+}
+
+/* Level meter */
+.level-meter {
+  height: 6px;
+  background: var(--surface);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.level-meter-fill {
+  height: 100%;
+  background: var(--accent);
+  width: 0%;
+  transition: width 0.05s;
+  border-radius: 3px;
+}
+
+/* Status text */
+.status {
+  text-align: center;
+  font-size: 0.9rem;
+  color: var(--muted);
+  min-height: 1.4em;
+}
+
+/* Waveform */
+.waveform-canvas {
+  width: 100%;
+  height: 80px;
+  background: var(--surface);
+  border-radius: 8px;
+  cursor: col-resize;
+}
+
+/* Transcript */
+.transcript {
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-align: center;
+  padding: 8px;
+}
+.transcript .last-word {
+  color: var(--accent);
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+/* Buttons row */
+.btn-row {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.btn {
+  padding: 10px 20px;
+  border-radius: 8px;
+  border: 2px solid var(--surface);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: all 0.15s;
+}
+.btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Sliders */
+.slider-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.85rem;
+}
+.slider-row input[type="range"] {
+  flex: 1;
+  accent-color: var(--accent);
+}
+
+/* Toggle */
+.toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+/* Progress */
+.progress-bar-wrap {
+  height: 4px;
+  background: var(--surface);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.progress-bar {
+  height: 100%;
+  background: var(--accent);
+  width: 0%;
+  transition: width 0.1s;
+}
+
+/* Hidden */
+.hidden {
+  display: none !important;
+}
