@@ -434,14 +434,13 @@ export function initUI(root: HTMLElement) {
     const vid = getVideoElement(frame);
     vid.currentTime = 0;
     void vid.play();
-    const ehhDuration = stitchResult.buffer.duration - stitchResult.ehhStartS;
     // Seed from current time so each replay looks slightly different
     const seed = (Date.now() % 10000) / 10000;
     player.play({
       buffer: stitchResult.buffer,
       ehhStartS: stitchResult.ehhStartS,
       onEhh: () => {
-        activeEffects = triggerEhhEffects(frame, ehhDuration, seed);
+        activeEffects = triggerEhhEffects(frame, 0, seed);
       },
       onProgress: (f) => updateProgress(frame, f),
       onEnd: () => {

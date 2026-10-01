@@ -113,26 +113,6 @@ function animateDash(
   requestAnimationFrame(step);
 }
 
-// ── Screen shake ──────────────────────────────────────────────────────────────
-
-function shake(frame: HTMLElement) {
-  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-  const { SHAKE_MAGNITUDE_PX: mag, SHAKE_DURATION_MS: dur } = EFFECTS;
-  const steps = 8;
-  let i = 0;
-  const tick = () => {
-    if (i >= steps) {
-      frame.style.transform = "";
-      return;
-    }
-    const decay = 1 - i / steps;
-    frame.style.transform = `translate(${(Math.random() - 0.5) * mag * 2 * decay}px,${(Math.random() - 0.5) * mag * 2 * decay}px)`;
-    i++;
-    setTimeout(tick, dur / steps);
-  };
-  tick();
-}
-
 // ── SVG helper ────────────────────────────────────────────────────────────────
 
 function svgPath(attrs: Record<string, string>): SVGPathElement {
@@ -149,7 +129,7 @@ export interface EffectsHandle {
 
 export function triggerEhhEffects(
   frame: HTMLElement,
-  ehhDurationS: number,
+  _ehhDurationS: number,
   seed: number,
 ): EffectsHandle {
   const instant = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -174,9 +154,7 @@ export function triggerEhhEffects(
   faceEl.style.cssText =
     `position:absolute;left:${faceLeft}px;top:${faceTop}px;` +
     `width:${fs}px;height:${fs}px;overflow:hidden;` +
-    `border-radius:52% 48% / 50% 46%;z-index:10;` +
-    `transform:scale(0);` +
-    `transition:transform ${EFFECTS.POPIN_DURATION_MS}ms cubic-bezier(0.34,1.56,0.64,1);`;
+    `border-radius:52% 48% / 50% 46%;z-index:10;`;
   const img = document.createElement("img");
   img.src = ASSETS.FACE_IMG;
   img.style.cssText = "width:100%;height:100%;object-fit:cover;display:block;";
@@ -185,12 +163,6 @@ export function triggerEhhEffects(
   );
   faceEl.appendChild(img);
   frame.appendChild(faceEl);
-  // Trigger pop-in after two frames so the transition fires
-  requestAnimationFrame(() =>
-    requestAnimationFrame(() => {
-      faceEl.style.transform = "scale(1)";
-    }),
-  );
 
   // ── Oval ──────────────────────────────────────────────────────────────────
   const svg = frame.querySelector(".effects-svg") as SVGSVGElement;
@@ -203,7 +175,6 @@ export function triggerEhhEffects(
     OVAL_STROKE_COLOR: SC,
     OVAL_STROKE_WIDTH: SW,
     OVAL_DRAW_MS: OD,
-    POPIN_DURATION_MS: PD,
   } = EFFECTS;
 
   const rng1 = mkRng(Math.round(seed * 0xffffff));
@@ -235,8 +206,8 @@ export function triggerEhhEffects(
 
   svg.appendChild(oval1);
   svg.appendChild(oval2);
-  animateDash(oval1, OD, instant ? 0 : PD, instant);
-  animateDash(oval2, OD, instant ? 0 : PD + 20, instant);
+  animateDash(oval1, OD, 0, instant);
+  animateDash(oval2, OD, 20, instant);
 
   // ── Arrow ─────────────────────────────────────────────────────────────────
   // Start from the inward-facing edge of the oval
@@ -280,35 +251,17 @@ export function triggerEhhEffects(
   headEl.style.opacity = "0";
   svg.appendChild(headEl);
 
-  const arrowDelay = instant ? 0 : PD + OD + 40;
+  const arrowDelay = instant ? 0 : OD + 40;
   animateDash(arrowEl, AD, arrowDelay, instant);
 
   const headDelay = instant ? 0 : arrowDelay + AD + 16;
   later(() => {
     headEl.style.opacity = "1";
-    shake(frame);
   }, headDelay);
-
-  // ── Fade-out ──────────────────────────────────────────────────────────────
-  const holdUntil = ehhDurationS * 1000 + EFFECTS.HOLD_AFTER_EHH_MS;
-  later(() => {
-    const fade = `opacity ${EFFECTS.FADE_OUT_MS}ms ease`;
-    faceEl.style.transition = fade;
-    faceEl.style.opacity = "0";
-    for (const el of [oval1, oval2, arrowEl, headEl] as SVGElement[]) {
-      el.style.transition = fade;
-      el.style.opacity = "0";
-    }
-    later(() => {
-      faceEl.remove();
-      for (const el of [oval1, oval2, arrowEl, headEl]) el.remove();
-    }, EFFECTS.FADE_OUT_MS);
-  }, holdUntil);
 
   return {
     clear() {
       for (const t of timers) clearTimeout(t);
-      frame.style.transform = "";
       faceEl.remove();
       for (const el of [oval1, oval2, arrowEl, headEl]) el.remove();
     },
