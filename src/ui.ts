@@ -6,6 +6,12 @@ import { stitch } from "./stitch";
 import { Player } from "./player";
 import { createFrame, getVideoElement, updateProgress } from "./frame";
 import { triggerEhhEffects, type EffectsHandle } from "./effects";
+import {
+  canExportVideo,
+  exportVideo,
+  downloadWav,
+  triggerDownload,
+} from "./exporter";
 
 // SVG circle r=46, circumference = 2π×46 ≈ 289
 const RING_CIRCUMFERENCE = 289;
@@ -62,6 +68,7 @@ export function initUI(root: HTMLElement) {
   transcriber.preload();
 
   let activeEffects: EffectsHandle | null = null;
+  let exportSeed = 0;
   let ehhArrayBuffer: ArrayBuffer | null = null;
   let ehhBuffer: AudioBuffer | null = null;
   let recordingBuffer: AudioBuffer | null = null;
@@ -434,19 +441,66 @@ export function initUI(root: HTMLElement) {
     const vid = getVideoElement(frame);
     vid.currentTime = 0;
     void vid.play();
-    // Seed from current time so each replay looks slightly different
-    const seed = (Date.now() % 10000) / 10000;
+    // New seed each replay so oval/arrow jitter varies; export reuses the last seed
+    exportSeed = (Date.now() % 10000) / 10000;
     player.play({
       buffer: stitchResult.buffer,
       ehhStartS: stitchResult.ehhStartS,
       onEhh: () => {
-        activeEffects = triggerEhhEffects(frame, 0, seed);
+        activeEffects = triggerEhhEffects(frame, 0, exportSeed);
       },
       onProgress: (f) => updateProgress(frame, f),
       onEnd: () => {
         updateProgress(frame, 0);
       },
     });
+  });
+
+  // Swap to audio-only download if canvas capture isn't available
+  const dlBtn = document.getElementById("btn-download") as HTMLButtonElement;
+  const videoExport = canExportVideo();
+  if (!videoExport) dlBtn.textContent = "Download audio";
+
+  dlBtn.addEventListener("click", async () => {
+    if (!stitchResult) return;
+    if (!videoExport) {
+      downloadWav(stitchResult.buffer);
+      return;
+    }
+    // Stop any active playback/effects so the export canvas has a clean state
+    player.stop();
+    activeEffects?.clear();
+    activeEffects = null;
+
+    const allBtns = document.querySelectorAll<HTMLButtonElement>(".btn");
+    allBtns.forEach((b) => (b.disabled = true));
+    show("export-progress-wrap");
+    const bar = document.getElementById("export-progress") as HTMLElement;
+    bar.style.width = "0%";
+    setStatus("Rendering video…");
+
+    try {
+      const blob = await exportVideo({
+        videoEl: getVideoElement(frame),
+        stitchedBuffer: stitchResult.buffer,
+        ehhStartS: stitchResult.ehhStartS,
+        seed: exportSeed,
+        onProgress: (f) => {
+          bar.style.width = `${f * 100}%`;
+          setStatus(`Rendering… ${Math.round(f * 100)}%`);
+        },
+      });
+      const ext = blob.type.includes("mp4") ? "mp4" : "webm";
+      triggerDownload(blob, `ehh-ifier.${ext}`);
+      setStatus("Done! Check your downloads.");
+    } catch (err) {
+      setStatus("Export failed: " + String(err));
+      console.error(err);
+    } finally {
+      allBtns.forEach((b) => (b.disabled = false));
+      hide("export-progress-wrap");
+      bar.style.width = "0%";
+    }
   });
 
   document.getElementById("btn-rerecord")!.addEventListener("click", () => {

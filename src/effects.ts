@@ -121,6 +121,83 @@ function svgPath(attrs: Record<string, string>): SVGPathElement {
   return el;
 }
 
+// ── Scene builder (shared with exporter) ─────────────────────────────────────
+
+export interface EffectScene {
+  faceX: number;
+  faceY: number;
+  faceW: number;
+  faceH: number;
+  ovalPath1: string;
+  ovalPath2: string;
+  arrowPath: string;
+  headPath: string;
+}
+
+export function buildEffectScene(
+  frameW: number,
+  frameH: number,
+  seed: number,
+): EffectScene {
+  // Call order of rng() must mirror triggerEhhEffects exactly
+  const rng = mkRng(Math.round(seed * 0xffffff) | 1);
+  const fs = Math.round(frameW * EFFECTS.FACE_SIZE_FRACTION);
+  const faceTop = frameH - Math.round(frameH * 0.16) - fs;
+  const side = rng() > 0.5 ? "right" : "left"; // rng call 1
+  const faceLeft = side === "left" ? 8 : frameW - 80 - fs;
+
+  const cx = faceLeft + fs / 2,
+    cy = faceTop + fs / 2;
+  const rx = (fs / 2) * 1.2,
+    ry = (fs / 2) * 1.14;
+  const { OVAL_JITTER: J } = EFFECTS;
+
+  const rng1 = mkRng(Math.round(seed * 0xffffff));
+  const rng2 = mkRng(Math.round(seed * 0xffffff) + 7);
+  const ovalPath1 = jitteredEllipse(cx, cy, rx, ry, J, 1.15, rng1);
+  const ovalPath2 = jitteredEllipse(
+    cx + (rng() - 0.5) * 4, // rng call 2
+    cy + (rng() - 0.5) * 4, // rng call 3
+    rx + 1,
+    ry + 1,
+    J + 2,
+    1.1,
+    rng2,
+  );
+
+  const arrowFrom: Pt = {
+    x: side === "left" ? cx + rx * 1.05 : cx - rx * 1.05,
+    y: cy - fs * 0.06,
+  };
+  const arrowRng = mkRng(Math.round(seed * 0xffffff) + 99);
+  let tx = frameW * 0.1 + arrowRng() * frameW * 0.8;
+  let ty = frameH * 0.08 + arrowRng() * frameH * 0.38;
+  const raw = Math.hypot(tx - arrowFrom.x, ty - arrowFrom.y);
+  const clamped = Math.min(frameH * 0.45, Math.max(frameH * 0.28, raw));
+  if (Math.abs(clamped - raw) > 1) {
+    const s = clamped / raw;
+    tx = arrowFrom.x + (tx - arrowFrom.x) * s;
+    ty = arrowFrom.y + (ty - arrowFrom.y) * s;
+  }
+  const { d: arrowPath, cp2 } = wobblyCubic(
+    arrowFrom,
+    { x: tx, y: ty },
+    arrowRng,
+  );
+  const headPath = arrowheadPoly({ x: tx, y: ty }, cp2, frameW * 0.055);
+
+  return {
+    faceX: faceLeft,
+    faceY: faceTop,
+    faceW: fs,
+    faceH: fs,
+    ovalPath1,
+    ovalPath2,
+    arrowPath,
+    headPath,
+  };
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export interface EffectsHandle {
